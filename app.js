@@ -1,4 +1,3 @@
-/* app.js */
 const TASKS = [
   { id: 0, label: "Adderall XR 20 mg + Probiotic", offset: 0 },
   { id: 1, label: "Celsius (1st can)", offset: 30 },
@@ -10,50 +9,78 @@ const TASKS = [
   { id: 7, label: "Ashwagandha + Magnesium glycinate", offset: 900 },
 ];
 
-let wakeTime = null;
-let status = []; // boolean array tracking completion
+let wakeTime = null; // epoch milliseconds
+let status = [];    // boolean[] same length as TASKS
 
 const startBtn = document.getElementById("startBtn");
-const skipBtn = document.getElementById("skipBtn");
+const skipBtn  = document.getElementById("skipBtn");
 const resetBtn = document.getElementById("resetBtn");
-const listEl = document.getElementById("checklist");
+const listEl   = document.getElementById("checklist");
 
 startBtn.addEventListener("click", startDay);
 skipBtn.addEventListener("click", skipToNow);
 resetBtn.addEventListener("click", resetDay);
 
+/** Parse HH:MM (24‑hour) string into a Date for today. */
+function parseTimeInput(str) {
+  const [h, m] = str.split(":" ).map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const now = new Date();
+  const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+  // if user typed a future time (e.g., 23:30 when it's 01:00), treat as yesterday
+  if (candidate.getTime() > now.getTime()) {
+    candidate.setDate(candidate.getDate() - 1);
+  }
+  return candidate;
+}
+
 function init() {
-  // Register service worker (PWA + background notifications)
+  // Register service worker
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(console.error);
   }
 
-  // Request notification permission early
-  if ("Notification" in window) {
-    Notification.requestPermission();
-  }
+  // Restore any saved state
+  wakeTime = Number(localStorage.getItem("wakeTime")) || null;
+  status   = JSON.parse(localStorage.getItem("status") || "[]");
 
-  // Restore state if present
-  const savedWake = localStorage.getItem("wakeTime");
-  const savedStatus = localStorage.getItem("status");
-  if (savedWake) {
-    wakeTime = Number(savedWake);
-    status = JSON.parse(savedStatus || "[]");
-    skipBtn.disabled = false;
+  if (wakeTime) {
+    skipBtn.disabled  = false;
     resetBtn.disabled = false;
     scheduleAll();
   }
-
   render();
+
+  // ask for notifications up front (optional)
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
 }
 
 function startDay() {
-  wakeTime = Date.now();
-  status = TASKS.map(() => false);
-  localStorage.setItem("wakeTime", wakeTime);
+  const input = prompt("What time did you wake up today? (HH:MM 24‑hour) | Leave blank to use now");
+  let w;
+  if (input && input.trim()) {
+    const parsed = parseTimeInput(input.trim());
+    if (!parsed) {
+      alert("Could not parse time. Using current time.");
+      w = Date.now();
+    } else {
+      w = parsed.getTime();
+    }
+  } else {
+    w = Date.now();
+  }
+
+  wakeTime = w;
+  status   = TASKS.map(() => false);
+
+  localStorage.setItem("wakeTime", String(wakeTime));
   localStorage.setItem("status", JSON.stringify(status));
-  skipBtn.disabled = false;
+
+  skipBtn.disabled  = false;
   resetBtn.disabled = false;
+
   scheduleAll();
   render();
 }
@@ -64,27 +91,29 @@ function scheduleAll() {
 
 function scheduleTask(i) {
   if (!wakeTime) return;
-  const taskTime = wakeTime + TASKS[i].offset * 60 * 1000;
+  const taskTime = wakeTime + TASKS[i].offset * 60000; // ms
   const delay = taskTime - Date.now();
-  if (delay <= 0) return; // task time already passed
+  if (delay <= 0) return; // already passed
+
   setTimeout(() => notifyTask(i), delay);
 }
 
 function notifyTask(i) {
-  if (status[i]) return; // already done/ignored
+  if (status[i]) return; // already done
   const task = TASKS[i];
-  // Browser notification
+
   if ("Notification" in window && Notification.permission === "granted") {
     navigator.serviceWorker.ready.then((reg) => {
       reg.showNotification("Time for: " + task.label, {
-        body: "Open the checklist to confirm.",
+        body: "Tap to open checklist and mark done.",
         tag: "task-" + i,
       });
     });
   } else {
     alert("Time for: " + task.label);
   }
-  // Highlight item in list
+
+  // visually draw attention
   const li = document.getElementById("task-" + i);
   if (li) li.classList.add("notify");
 }
@@ -93,9 +122,9 @@ function skipToNow() {
   if (!wakeTime) return;
   const now = Date.now();
   TASKS.forEach((t, i) => {
-    const taskTime = wakeTime + t.offset * 60 * 1000;
-    if (now >= taskTime && !status[i]) {
-      status[i] = true; // mark done (skipped)
+    const taskTime = wakeTime + t.offset * 60000;
+    if (now >= taskTime) {
+      status[i] = true; // mark as completed (skipped)
     }
   });
   localStorage.setItem("status", JSON.stringify(status));
@@ -106,8 +135,8 @@ function resetDay() {
   localStorage.removeItem("wakeTime");
   localStorage.removeItem("status");
   wakeTime = null;
-  status = [];
-  skipBtn.disabled = true;
+  status  = [];
+  skipBtn.disabled  = true;
   resetBtn.disabled = true;
   render();
 }
@@ -118,8 +147,8 @@ function toggleDone(i) {
   render();
 }
 
-function formatTime(dateObj) {
-  return dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function formatTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function render() {
@@ -133,19 +162,20 @@ function render() {
     const label = document.createElement("span");
     label.textContent = task.label;
 
-    const time = document.createElement("span");
-    time.className = "time";
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "time";
     if (wakeTime) {
-      const tDate = new Date(wakeTime + task.offset * 60 * 1000);
-      time.textContent = formatTime(tDate);
+      const taskStamp = wakeTime + task.offset * 60000;
+      timeSpan.textContent = formatTime(taskStamp);
     } else {
-      time.textContent = "+" + task.offset + "m";
+      timeSpan.textContent = "+" + task.offset + "m";
     }
 
     li.appendChild(label);
-    li.appendChild(time);
+    li.appendChild(timeSpan);
     listEl.appendChild(li);
   });
 }
 
+// Kick it off
 init();
