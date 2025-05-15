@@ -15,12 +15,13 @@ let status   = [];    // boolean per task
 
 // --------------------------- DOM refs ----------------------------------
 const startBtn = document.getElementById("startBtn");
-const skipBtn  = document.getElementById("skipBtn");
+// Remove the Skip button element entirely if present
+const skipBtnEl = document.getElementById("skipBtn");
+if (skipBtnEl) skipBtnEl.remove();
 const resetBtn = document.getElementById("resetBtn");
 const listEl   = document.getElementById("checklist");
 
 startBtn.addEventListener("click", showWakePicker);
-skipBtn.addEventListener("click", skipToNow);
 resetBtn.addEventListener("click", resetDay);
 
 // -------------------------- Utilities ----------------------------------
@@ -94,7 +95,7 @@ function setWakeTime(ms){
   status=TASKS.map(()=>false);
   localStorage.setItem("wakeTime",String(wakeTime));
   localStorage.setItem("status",JSON.stringify(status));
-  skipBtn.disabled=resetBtn.disabled=false;
+  resetBtn.disabled=false;
   const now=Date.now();
   const pastIdx=TASKS.filter((t,i)=>now>=wakeTime+t.offset*60000).map(t=>t.id);
   scheduleAll();
@@ -123,19 +124,12 @@ function notifyTask(i){
   if(li) li.classList.add("notify");
 }
 
-// -------------------- Skip / Reset ------------------------------------
-function skipToNow(){
-  if(!wakeTime) return;
-  const now=Date.now();
-  TASKS.forEach((t,i)=>{ if(now>=wakeTime+t.offset*60000) status[i]=true; });
-  localStorage.setItem("status",JSON.stringify(status));
-  render();
-}
+// -------------------- Reset -------------------------------------------
 function resetDay(){
   localStorage.removeItem("wakeTime");
   localStorage.removeItem("status");
   wakeTime=null; status=[];
-  skipBtn.disabled=resetBtn.disabled=true;
+  resetBtn.disabled=true;
   render();
 }
 
@@ -165,7 +159,7 @@ function render(){
   if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
   wakeTime=Number(localStorage.getItem("wakeTime"))||null;
   status=JSON.parse(localStorage.getItem("status")||"[]");
-  if(wakeTime){ skipBtn.disabled=resetBtn.disabled=false; scheduleAll(); }
+  if(wakeTime){ resetBtn.disabled=false; scheduleAll(); }
   if("Notification" in window && Notification.permission==="default") Notification.requestPermission();
   render();
 })();
