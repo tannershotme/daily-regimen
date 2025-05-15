@@ -1,3 +1,5 @@
+/* app.js – hide Start button once the day begins, re‑show on reset */
+
 // --------------------------- Task list ---------------------------------
 const TASKS = [
   { id: 0, label: "Adderall XR 20 mg + Probiotic", offset: 0 },
@@ -15,19 +17,21 @@ let status   = [];    // boolean per task
 
 // --------------------------- DOM refs ----------------------------------
 const startBtn = document.getElementById("startBtn");
-// Remove the Skip button element entirely if present
-const skipBtnEl = document.getElementById("skipBtn");
-if (skipBtnEl) skipBtnEl.remove();
 const resetBtn = document.getElementById("resetBtn");
+const skipEl   = document.getElementById("skipBtn"); // may still be in HTML
+if (skipEl) skipEl.remove();                          // remove obsolete element
 const listEl   = document.getElementById("checklist");
 
 startBtn.addEventListener("click", showWakePicker);
 resetBtn.addEventListener("click", resetDay);
 
+function hideStart(){ startBtn.style.display = "none"; }
+function showStart(){ startBtn.style.display = "inline-block"; }
+
 // -------------------------- Utilities ----------------------------------
 const pad = n => String(n).padStart(2, "0");
 const parseTimeInput = str => {
-  const [h, m] = str.split(":" ).map(Number);
+  const [h,m] = str.split(":" ).map(Number);
   if (Number.isNaN(h) || Number.isNaN(m)) return null;
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
@@ -37,11 +41,10 @@ const parseTimeInput = str => {
 const formatTime = ts => new Date(ts).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
 
 // -------------------- Overlay helpers ----------------------------------
-function ensureOverlayCSS(){
+function ensureCSS(){
   if(document.getElementById("overlay-css")) return;
-  const style=document.createElement("style");
-  style.id="overlay-css";
-  style.textContent=`.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000}`+
+  const s=document.createElement("style"); s.id="overlay-css";
+  s.textContent=`.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000}`+
     `.picker{background:#fff;padding:1rem 1.25rem;border-radius:.75rem;box-shadow:0 2px 8px rgba(0,0,0,.2);text-align:center;max-width:90%}`+
     `.picker h2{margin:0 0 .75rem;font-size:1.1rem}`+
     `.picker input{padding:.5rem;width:140px;font-size:1rem}`+
@@ -49,14 +52,13 @@ function ensureOverlayCSS(){
     `.picker-buttons button{padding:.45rem 1rem;border:none;border-radius:.5rem;background:#4f46e5;color:#fff;font-weight:600;cursor:pointer}`+
     `.task-list{max-height:50vh;overflow:auto;text-align:left;margin:.5rem 0}`+
     `.task-list label{display:block;margin:.25rem 0}`;
-  document.head.appendChild(style);
+  document.head.appendChild(s);
 }
 
 // -------------------- Wake‑time picker ---------------------------------
 function showWakePicker(){
-  ensureOverlayCSS();
-  const ov=document.createElement("div");
-  ov.className="overlay";
+  ensureCSS();
+  const ov=document.createElement("div"); ov.className="overlay";
   ov.innerHTML=`<div class="picker"><h2>Select wake‑up time</h2><input id="wakeInput" type="time" step="60"><div class="picker-buttons"><button id="confirmWake">Start</button><button id="cancelWake" style="background:#9ca3af">Cancel</button></div></div>`;
   document.body.appendChild(ov);
   const now=new Date();
@@ -72,94 +74,39 @@ function showWakePicker(){
 }
 
 // -------------------- Past‑task overlay --------------------------------
-function promptPastTasks(pastIdx){
-  if(!pastIdx.length) return;
-  ensureOverlayCSS();
-  const ov=document.createElement("div");
-  ov.className="overlay";
-  const listHtml=pastIdx.map(i=>`<label><input type="checkbox" data-idx="${i}"> ${TASKS[i].label}</label>`).join("");
-  ov.innerHTML=`<div class="picker"><h2>Mark what you already took</h2><div class="task-list">${listHtml}</div><div class="picker-buttons"><button id="checkAllPast" style="background:#22c55e">Check All</button><button id="savePast">Save</button></div></div>`;
+function promptPastTasks(ids){
+  if(!ids.length) return;
+  ensureCSS();
+  const ov=document.createElement("div"); ov.className="overlay";
+  ov.innerHTML=`<div class="picker"><h2>Mark what you already took</h2><div class="task-list">${ids.map(i=>`<label><input type=checkbox data-idx=${i}> ${TASKS[i].label}</label>`).join("")}</div><div class="picker-buttons"><button id="checkAllPast" style="background:#22c55e">Check All</button><button id="savePast">Save</button></div></div>`;
   document.body.appendChild(ov);
   ov.querySelector("#checkAllPast").onclick=()=>ov.querySelectorAll("input[type=checkbox]").forEach(cb=>cb.checked=true);
   ov.querySelector("#savePast").onclick=()=>{
-    ov.querySelectorAll("input[type=checkbox]").forEach(cb=>{ if(cb.checked) status[Number(cb.dataset.idx)]=true; });
+    ov.querySelectorAll("input[type=checkbox]").forEach(cb=>{ if(cb.checked) status[+cb.dataset.idx]=true; });
     localStorage.setItem("status",JSON.stringify(status));
     render();
     document.body.removeChild(ov);
   };
 }
 
-// -------------------- State management --------------------------------
+// -------------------- State & scheduler --------------------------------
 function setWakeTime(ms){
-  wakeTime=ms;
-  status=TASKS.map(()=>false);
-  localStorage.setItem("wakeTime",String(wakeTime));
-  localStorage.setItem("status",JSON.stringify(status));
-  resetBtn.disabled=false;
+  wakeTime=ms; status=TASKS.map(()=>false); hideStart(); resetBtn.disabled=false;
+  localStorage.setItem("wakeTime",wakeTime); localStorage.setItem("status",JSON.stringify(status));
   const now=Date.now();
-  const pastIdx=TASKS.filter((t,i)=>now>=wakeTime+t.offset*60000).map(t=>t.id);
-  scheduleAll();
-  render();
-  promptPastTasks(pastIdx);
+  promptPastTasks(TASKS.filter((t,i)=>now>=wakeTime+t.offset*60000).map(t=>t.id));
+  scheduleAll(); render();
 }
-
-// -------------------- Scheduler & notifications -----------------------
 function scheduleAll(){TASKS.forEach((_,i)=>scheduleTask(i));}
-function scheduleTask(i){
-  if(!wakeTime) return;
-  const when=wakeTime+TASKS[i].offset*60000;
-  const delay=when-Date.now();
-  if(delay<=0) return;
-  setTimeout(()=>notifyTask(i),delay);
-}
-function notifyTask(i){
-  if(status[i]) return;
-  const task=TASKS[i];
-  if("Notification" in window && Notification.permission==="granted"){
-    navigator.serviceWorker.ready.then(reg=>reg.showNotification(`Time for: ${task.label}`,{body:"Open checklist to confirm.",tag:`task-${i}`}));
-  }else{
-    alert(`Time for: ${task.label}`);
-  }
-  const li=document.getElementById(`task-${i}`);
-  if(li) li.classList.add("notify");
-}
+function scheduleTask(i){ if(!wakeTime) return; const delay=wakeTime+TASKS[i].offset*60000-Date.now(); if(delay>0) setTimeout(()=>notify(i),delay);} 
+function notify(i){ if(status[i]) return; const t=TASKS[i]; if(Notification.permission==="granted") navigator.serviceWorker.ready.then(r=>r.showNotification(`Time for: ${t.label}`,{body:"Open checklist to confirm.",tag:`task-${i}`})); else alert(`Time for: ${t.label}`);} 
 
 // -------------------- Reset -------------------------------------------
-function resetDay(){
-  localStorage.removeItem("wakeTime");
-  localStorage.removeItem("status");
-  wakeTime=null; status=[];
-  resetBtn.disabled=true;
-  render();
-}
+function resetDay(){ localStorage.clear(); wakeTime=null; status=[]; showStart(); resetBtn.disabled=true; render(); }
 
-// -------------------- UI rendering ------------------------------------
-function toggleDone(i){
-  status[i]=!status[i];
-  localStorage.setItem("status",JSON.stringify(status));
-  render();
-}
-function render(){
-  listEl.innerHTML="";
-  TASKS.forEach((task,i)=>{
-    const li=document.createElement("li");
-    li.className="task"+(status[i]?" done":"");
-    li.id=`task-${i}`;
-    li.onclick=()=>toggleDone(i);
-    const label=document.createElement("span"); label.textContent=task.label;
-    const time=document.createElement("span"); time.className="time";
-    time.textContent=wakeTime?formatTime(wakeTime+task.offset*60000):`+${task.offset}m`;
-    li.append(label,time);
-    listEl.appendChild(li);
-  });
-}
+// -------------------- UI ----------------------------------------------
+function toggleDone(i){ status[i]=!status[i]; localStorage.setItem("status",JSON.stringify(status)); render(); }
+function render(){ listEl.innerHTML=""; TASKS.forEach((t,i)=>{ const li=document.createElement("li"); li.className=`task${status[i]?" done":""}`; li.id=`task-${i}`; li.onclick=()=>toggleDone(i); const label=document.createElement("span"); label.textContent=t.label; const time=document.createElement("span"); time.className="time"; time.textContent=wakeTime?formatTime(wakeTime+t.offset*60000):`+${t.offset}m`; li.append(label,time); listEl.appendChild(li); }); }
 
 // -------------------- Init --------------------------------------------
-(function init(){
-  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
-  wakeTime=Number(localStorage.getItem("wakeTime"))||null;
-  status=JSON.parse(localStorage.getItem("status")||"[]");
-  if(wakeTime){ resetBtn.disabled=false; scheduleAll(); }
-  if("Notification" in window && Notification.permission==="default") Notification.requestPermission();
-  render();
-})();
+(function(){ if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js"); wakeTime=+localStorage.getItem("wakeTime")||null; status=JSON.parse(localStorage.getItem("status")||"[]"); if(wakeTime){ hideStart(); resetBtn.disabled=false; scheduleAll(); } else { showStart(); resetBtn.disabled=true; } if(Notification.permission==="default") Notification.requestPermission(); render(); })();
