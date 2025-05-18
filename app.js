@@ -14,6 +14,7 @@ const TASKS = [
 
 let wakeTime = null;  // epoch ms marking wake‑up
 let status   = [];    // boolean per task
+let timers   = [];    // setTimeout handles
 
 // --------------------------- DOM refs ----------------------------------
 const startBtn = document.getElementById("startBtn");
@@ -90,7 +91,9 @@ function promptPastTasks(ids){
 }
 
 // -------------------- State & scheduler --------------------------------
+function clearAllTimers(){ timers.forEach(id=>clearTimeout(id)); timers=[]; }
 function setWakeTime(ms){
+  clearAllTimers();
   wakeTime=ms; status=TASKS.map(()=>false); hideStart(); resetBtn.disabled=false;
   localStorage.setItem("wakeTime",wakeTime); localStorage.setItem("status",JSON.stringify(status));
   const now=Date.now();
@@ -98,11 +101,18 @@ function setWakeTime(ms){
   scheduleAll(); render();
 }
 function scheduleAll(){TASKS.forEach((_,i)=>scheduleTask(i));}
-function scheduleTask(i){ if(!wakeTime) return; const delay=wakeTime+TASKS[i].offset*60000-Date.now(); if(delay>0) setTimeout(()=>notify(i),delay);} 
-function notify(i){ if(status[i]) return; const t=TASKS[i]; if(Notification.permission==="granted") navigator.serviceWorker.ready.then(r=>r.showNotification(`Time for: ${t.label}`,{body:"Open checklist to confirm.",tag:`task-${i}`})); else alert(`Time for: ${t.label}`);} 
+function scheduleTask(i){ if(!wakeTime) return; const delay=wakeTime+TASKS[i].offset*60000-Date.now(); if(delay>0) { const id=setTimeout(()=>notify(i),delay); timers.push(id); }}
+function notify(i){ if(status[i]) return; const t=TASKS[i]; if(Notification.permission==="granted") navigator.serviceWorker.ready.then(r=>r.showNotification(`Time for: ${t.label}`,{body:"Open checklist to confirm.",tag:`task-${i}`})); else alert(`Time for: ${t.label}`);}
 
 // -------------------- Reset -------------------------------------------
-function resetDay(){ localStorage.clear(); wakeTime=null; status=[]; showStart(); resetBtn.disabled=true; render(); }
+function resetDay(){
+  clearAllTimers();
+  localStorage.clear();
+  wakeTime=null; status=[];
+  showStart();
+  resetBtn.disabled=true;
+  render();
+}
 
 // -------------------- UI ----------------------------------------------
 function toggleDone(i){ status[i]=!status[i]; localStorage.setItem("status",JSON.stringify(status)); render(); }
