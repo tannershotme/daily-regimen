@@ -56,7 +56,7 @@ function ensureCSS(){
   document.head.appendChild(s);
 }
 
-// -------------------- Wake‑time picker ---------------------------------
+// -------------------- Wake-time picker ---------------------------------
 function showWakePicker(){
   ensureCSS();
   const ov=document.createElement("div"); ov.className="overlay";
