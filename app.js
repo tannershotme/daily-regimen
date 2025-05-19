@@ -12,9 +12,13 @@ const DEFAULT_TASKS = [
   { label: "Vitamin D3, Fish Oil, CoQ10", offset: 720 },
   { label: "Ashwagandha + Magnesium glycinate", offset: 900 },
 ];
-let tasks = JSON.parse(localStorage.getItem("tasks") || "null");
-// Fallback to defaults if nothing stored
-if (!Array.isArray(tasks) || !tasks.length) tasks = DEFAULT_TASKS.slice();
+let tasks;
+try { tasks = JSON.parse(localStorage.getItem("tasks") || "null"); }
+catch { tasks = null; }
+
+// Fallback to defaults if nothing stored or parsing failed
+if (!Array.isArray(tasks) || !tasks.every(t => t && typeof t.offset === "number"))
+  tasks = DEFAULT_TASKS.slice();
 
 let wakeTime = null;  // epoch ms marking wake‑up
 let status   = [];    // boolean per task
