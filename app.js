@@ -87,10 +87,15 @@ function showWakePicker(){
   ov.querySelector("#wakeInput").focus();
   ov.querySelector("#cancelWake").onclick=()=>document.body.removeChild(ov);
   ov.querySelector("#confirmWake").onclick=()=>{
-    const val=ov.querySelector("#wakeInput").value;
-    const parsed=parseTimeInput(val);
-    setWakeTime(parsed?parsed.getTime():Date.now());
-    document.body.removeChild(ov);
+    try{
+      const val=ov.querySelector("#wakeInput").value;
+      const parsed=parseTimeInput(val);
+      setWakeTime(parsed?parsed.getTime():Date.now());
+    }catch(e){
+      console.error("Failed to start day",e);
+    }finally{
+      document.body.removeChild(ov);
+    }
   };
 }
 
@@ -166,7 +171,22 @@ function setWakeTime(ms){
 }
 function scheduleAll(){tasks.forEach((_,i)=>scheduleTask(i));}
 function scheduleTask(i){ if(!wakeTime) return; const delay=wakeTime+tasks[i].offset*60000-Date.now(); if(delay>0) { const id=setTimeout(()=>notify(i),delay); timers.push(id); }}
-function notify(i){ if(status[i]) return; const t=tasks[i]; if(Notification.permission==="granted") navigator.serviceWorker.ready.then(r=>r.showNotification(`Time for: ${t.label}`,{body:"Open checklist to confirm.",tag:`task-${i}`})); else alert(`Time for: ${t.label}`);}
+function notify(i){
+  if(status[i]) return;
+  const t=tasks[i];
+  if(Notification.permission==="granted"){
+    if(navigator.serviceWorker && navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready
+        .then(r=>r.showNotification(`Time for: ${t.label}`,{body:"Open checklist to confirm.",tag:`task-${i}`}))
+        .catch(e=>console.error("Notify failed",e));
+    }else{
+      try{ new Notification(`Time for: ${t.label}`,{body:"Open checklist to confirm.",tag:`task-${i}`}); }
+      catch(e){ console.error("Notification error",e); }
+    }
+  }else{
+    alert(`Time for: ${t.label}`);
+  }
+}
 
 // -------------------- Reset -------------------------------------------
 function resetDay(){
@@ -198,7 +218,8 @@ function render(){
 
 // -------------------- Init --------------------------------------------
 (function(){
-  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+  if("serviceWorker" in navigator)
+    navigator.serviceWorker.register("sw.js").catch(e=>console.error("SW reg failed",e));
   wakeTime=+localStorage.getItem("wakeTime")||null;
   status=JSON.parse(localStorage.getItem("status")||"[]");
   if(wakeTime){ hideStart(); resetBtn.disabled=false; scheduleAll(); }
