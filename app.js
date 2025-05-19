@@ -41,6 +41,13 @@ function showStart(){ startBtn.style.display = "inline-block"; }
 
 // -------------------------- Utilities ----------------------------------
 const pad = n => String(n).padStart(2, "0");
+const escapeHTML = s => s.replace(/[&<>"']/g, c => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+}[c]));
 const parseTimeInput = str => {
   const [h,m] = str.split(":" ).map(Number);
   if (Number.isNaN(h) || Number.isNaN(m)) return null;
@@ -92,7 +99,7 @@ function promptPastTasks(ids){
   if(!ids.length) return;
   ensureCSS();
   const ov=document.createElement("div"); ov.className="overlay";
-  ov.innerHTML=`<div class="picker"><h2>Mark what you already took</h2><div class="task-list">${ids.map(i=>`<label><input type=checkbox data-idx=${i}> ${tasks[i].label}</label>`).join("")}</div><div class="picker-buttons"><button id="checkAllPast" style="background:#22c55e">Check All</button><button id="savePast">Save</button></div></div>`;
+  ov.innerHTML=`<div class="picker"><h2>Mark what you already took</h2><div class="task-list">${ids.map(i=>`<label><input type=checkbox data-idx=${i}> ${escapeHTML(tasks[i].label)}</label>`).join("")}</div><div class="picker-buttons"><button id="checkAllPast" style="background:#22c55e">Check All</button><button id="savePast">Save</button></div></div>`;
   document.body.appendChild(ov);
   ov.querySelector("#checkAllPast").onclick=()=>ov.querySelectorAll("input[type=checkbox]").forEach(cb=>cb.checked=true);
   ov.querySelector("#savePast").onclick=()=>{
@@ -111,9 +118,23 @@ function showTaskEditor(){
   document.body.appendChild(ov);
   const list=ov.querySelector("#editList");
   const addRow=t=>{
-    const row=document.createElement("div"); row.className="task-edit-row";
-    row.innerHTML=`<input class="label" placeholder="Label" value="${t.label}"><input class="offset" type="number" min="0" value="${t.offset}" style="width:70px"><button class="remove">\u2715</button>`;
-    row.querySelector(".remove").onclick=()=>list.removeChild(row);
+    const row=document.createElement("div");
+    row.className="task-edit-row";
+    const labelInput=document.createElement("input");
+    labelInput.className="label";
+    labelInput.placeholder="Label";
+    labelInput.value=t.label;
+    const offsetInput=document.createElement("input");
+    offsetInput.className="offset";
+    offsetInput.type="number";
+    offsetInput.min="0";
+    offsetInput.value=t.offset;
+    offsetInput.style.width="70px";
+    const removeBtn=document.createElement("button");
+    removeBtn.className="remove";
+    removeBtn.textContent="\u2715";
+    removeBtn.onclick=()=>list.removeChild(row);
+    row.append(labelInput,offsetInput,removeBtn);
     list.appendChild(row);
   };
   tasks.forEach(addRow);
